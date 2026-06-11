@@ -201,6 +201,8 @@
     }
     .act-btn:hover { border-color: var(--accent-soft); color: var(--text); }
     .act-btn.active { background: var(--accent-dim); border-color: var(--accent-soft); color: var(--accent-text); }
+    .act-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+    .act-btn.primary:hover { background: var(--accent-soft); }
     .act-btn.danger { border-color: var(--red); color: var(--red); }
     .act-btn.danger:hover { background: rgba(255,95,87,0.1); }
 
@@ -342,7 +344,17 @@
       Capture screen
     </button>
     <div id="upload-msg" style="display:none"></div>
-    <p class="req-note">Requires ≥ 1280×720 and ~16:9 aspect.</p>
+    <p class="req-note">Requires ≥ 1280×720. Off-ratio images open a 16:9 crop step.</p>
+  </div>
+
+  <!-- Crop to 16:9 (shown when an off-ratio image needs cropping) -->
+  <div class="section" id="crop-section" style="display:none">
+    <div class="section-label">Crop to 16:9</div>
+    <p class="hint-text" style="margin-bottom:8px">Drag the frame to position it. Resize from any corner — the 16:9 ratio and 1280×720 minimum stay locked.</p>
+    <div class="action-row">
+      <button class="act-btn primary" id="crop-apply">Apply</button>
+      <button class="act-btn" id="crop-cancel">Cancel</button>
+    </div>
   </div>
 
   <!-- Frame -->
@@ -589,6 +601,11 @@ document.addEventListener('keydown', e => {
   const inField = /input|textarea|select/i.test(document.activeElement?.tagName || '');
   if (inField) return;
 
+  if (CROP.active) {
+    if (e.key === 'Enter')  document.getElementById('crop-apply').click();
+    if (e.key === 'Escape') document.getElementById('crop-cancel').click();
+    return;
+  }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
   if (!S.img) return;
 
@@ -650,6 +667,25 @@ const $uploadMsg = document.getElementById('upload-msg');
 function showUploadError(msg) { $uploadMsg.innerHTML = msg; $uploadMsg.style.display = 'block'; }
 function clearUploadError()   { $uploadMsg.style.display = 'none'; $uploadMsg.textContent = ''; }
 
+// Adopt a validated image as the working screenshot
+function adoptImage(img) {
+  clearUploadError();
+  S.img = img;
+  S.magnifiers = []; S.blurs = [];
+  undoStack.length = 0;
+  S.offsetX = null; S.offsetY = null;
+  S.imgScale = 1;
+  $imgScale.value = 100;
+  document.getElementById('img-scale-val').textContent = '100%';
+  blurCache = null;
+  $empty.style.display = 'none';
+  $wrap.style.display  = 'block';
+  $exp.disabled = false;
+  $copy.disabled = false;
+  setMode('move');
+  render();
+}
+
 function loadFile(file) {
   if (!file?.type.startsWith('image/')) { showUploadError('That file isn’t an image.'); return; }
   const url = URL.createObjectURL(file);
@@ -658,36 +694,132 @@ function loadFile(file) {
     const w = img.naturalWidth, h = img.naturalHeight;
     const ar = w / h;
     const arLo = TARGET_AR * (1 - AR_TOL), arHi = TARGET_AR * (1 + AR_TOL);
-    const errs = [];
-    if (w < MIN_W || h < MIN_H)
-      errs.push(`Resolution is <b>${w}×${h}</b> — minimum is <b>${MIN_W}×${MIN_H}</b>.`);
-    if (ar < arLo || ar > arHi)
-      errs.push(`Aspect ratio is <b>${ar.toFixed(2)}:1</b> — needs to be near <b>16:9 (1.78:1)</b>.`);
-    if (errs.length) {
-      showUploadError('Upload rejected:<br/>• ' + errs.join('<br/>• '));
+    if (w < MIN_W || h < MIN_H) {
+      showUploadError(`Upload rejected: resolution is <b>${w}×${h}</b> — minimum is <b>${MIN_W}×${MIN_H}</b>.`);
       URL.revokeObjectURL(url);
       $fi.value = '';
       return;
     }
-    clearUploadError();
-    S.img = img;
-    S.magnifiers = []; S.blurs = [];
-    undoStack.length = 0;
-    S.offsetX = null; S.offsetY = null;
-    S.imgScale = 1;
-    $imgScale.value = 100;
-    document.getElementById('img-scale-val').textContent = '100%';
-    blurCache = null;
-    $empty.style.display = 'none';
-    $wrap.style.display  = 'block';
-    $exp.disabled = false;
-    $copy.disabled = false;
-    setMode('move');
-    render();
+    if (ar < arLo || ar > arHi) {
+      // Big enough but wrong shape — let the user crop a 16:9 region out of it
+      startCrop(img);
+      return;
+    }
+    adoptImage(img);
   };
   img.onerror = () => { showUploadError('Couldn’t read that image file.'); URL.revokeObjectURL(url); };
   img.src = url;
 }
+
+// ── Crop to 16:9 ──────────────────────────────────────────────────────────
+// Fixed-ratio crop frame over an off-ratio image (e.g. a full-page capture).
+// The frame is always 16:9 and never smaller than MIN_W×MIN_H.
+const CROP = { active: false, img: null, x: 0, y: 0, w: 0 };
+const cropH = () => CROP.w * 9 / 16;
+
+function startCrop(img) {
+  CROP.active = true;
+  CROP.img = img;
+  const iw = img.naturalWidth, ih = img.naturalHeight;
+  CROP.w = Math.min(iw, ih * 16 / 9);
+  CROP.x = (iw - CROP.w) / 2;
+  CROP.y = Math.max(0, Math.min((ih - cropH()) / 2, ih - cropH()));
+  clearUploadError();
+  document.getElementById('crop-section').style.display = '';
+  $empty.style.display = 'none';
+  $wrap.style.display  = 'block';
+  $exp.disabled = true;
+  $copy.disabled = true;
+  $banner.textContent = '✂︎ Position the 16:9 frame — drag to move, corners to resize';
+  $banner.classList.add('visible');
+  canvas.style.cursor = 'move';
+  renderCrop();
+}
+
+function endCrop() {
+  CROP.active = false;
+  CROP.img = null;
+  document.getElementById('crop-section').style.display = 'none';
+  $banner.classList.remove('visible');
+  $fi.value = '';
+}
+
+function clampCrop() {
+  const iw = CROP.img.naturalWidth, ih = CROP.img.naturalHeight;
+  const maxW = Math.min(iw, ih * 16 / 9);
+  CROP.w = Math.max(Math.min(MIN_W, maxW), Math.min(CROP.w, maxW));
+  CROP.x = Math.max(0, Math.min(CROP.x, iw - CROP.w));
+  CROP.y = Math.max(0, Math.min(CROP.y, ih - cropH()));
+}
+
+function renderCrop() {
+  const img = CROP.img;
+  const iw = img.naturalWidth, ih = img.naturalHeight;
+  canvas.width = iw; canvas.height = ih;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const sc = S.previewScale / 100;
+  canvas.style.width  = iw * sc + 'px';
+  canvas.style.height = ih * sc + 'px';
+
+  ctx.drawImage(img, 0, 0);
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(0, 0, iw, ih);
+
+  const { x, y, w } = CROP, h = cropH();
+  // Reveal the crop region
+  ctx.save();
+  ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+  ctx.drawImage(img, 0, 0);
+  ctx.restore();
+
+  // Frame border
+  ctx.save();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = Math.max(2, iw / 700);
+  ctx.setLineDash([10, 8]);
+  ctx.strokeRect(x, y, w, h);
+  ctx.setLineDash([]);
+  // Corner handles
+  const hl = Math.max(22, iw / 60);
+  ctx.lineWidth = Math.max(5, iw / 350);
+  ctx.lineCap = 'round';
+  [[x, y, 1, 1], [x+w, y, -1, 1], [x, y+h, 1, -1], [x+w, y+h, -1, -1]].forEach(([px, py, dx, dy]) => {
+    ctx.beginPath();
+    ctx.moveTo(px + dx*hl, py);
+    ctx.lineTo(px, py);
+    ctx.lineTo(px, py + dy*hl);
+    ctx.stroke();
+  });
+  // Size label
+  const label = `${Math.round(w)} × ${Math.round(h)}`;
+  ctx.font = `600 ${Math.max(13, iw/80)}px -apple-system, sans-serif`;
+  const tw = ctx.measureText(label).width;
+  const fs = Math.max(13, iw/80);
+  ctx.fillStyle = 'rgba(0,0,0,0.75)';
+  ctx.beginPath(); ctx.roundRect(x + 12, y + 12, tw + 18, fs * 1.8, 6); ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.fillText(label, x + 21, y + 12 + fs * 1.25);
+  ctx.restore();
+}
+
+document.getElementById('crop-apply').addEventListener('click', () => {
+  if (!CROP.active) return;
+  const { x, y, w } = CROP, h = cropH();
+  const c = document.createElement('canvas');
+  c.width = Math.round(w); c.height = Math.round(h);
+  c.getContext('2d').drawImage(CROP.img, x, y, w, h, 0, 0, c.width, c.height);
+  c.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => { endCrop(); adoptImage(img); };
+    img.src = url;
+  }, 'image/png');
+});
+document.getElementById('crop-cancel').addEventListener('click', () => {
+  endCrop();
+  if (S.img) render();
+  else { $wrap.style.display = 'none'; $empty.style.display = ''; }
+});
 
 // ── Geometry helpers ──────────────────────────────────────────────────────
 function srcRect() {
@@ -762,6 +894,29 @@ function hitMagnifier(cp) {
 let drag = null;
 
 canvas.addEventListener('mousedown', e => {
+  if (CROP.active) {
+    const cp = displayToCanvas(e.clientX, e.clientY);
+    const { x, y, w } = CROP, h = cropH();
+    const th = Math.max(30, CROP.img.naturalWidth / 35);  // corner grab radius
+    const corners = [
+      { cx: x,     cy: y,     dx: -1, dy: -1 },
+      { cx: x + w, cy: y,     dx:  1, dy: -1 },
+      { cx: x,     cy: y + h, dx: -1, dy:  1 },
+      { cx: x + w, cy: y + h, dx:  1, dy:  1 },
+    ];
+    const hitCorner = corners.find(c => Math.hypot(cp.x - c.cx, cp.y - c.cy) <= th);
+    if (hitCorner) {
+      // Anchor is the opposite corner — resizing keeps it pinned
+      drag = { type: 'crop-resize',
+               ax: hitCorner.dx === 1 ? x : x + w,
+               ay: hitCorner.dy === 1 ? y : y + h,
+               dx: hitCorner.dx, dy: hitCorner.dy };
+    } else if (cp.x >= x && cp.x <= x + w && cp.y >= y && cp.y <= y + h) {
+      drag = { type: 'crop-move', ox: CROP.x, oy: CROP.y, sx: cp.x, sy: cp.y };
+    }
+    e.preventDefault();
+    return;
+  }
   if (!S.img) return;
   const cp = displayToCanvas(e.clientX, e.clientY);
   const sc = S.previewScale / 100;
@@ -793,6 +948,29 @@ canvas.addEventListener('mousedown', e => {
 window.addEventListener('mousemove', e => {
   if (!drag) return;
   const cp = displayToCanvas(e.clientX, e.clientY);
+
+  if (drag.type === 'crop-move') {
+    CROP.x = drag.ox + (cp.x - drag.sx);
+    CROP.y = drag.oy + (cp.y - drag.sy);
+    clampCrop();
+    renderCrop();
+    return;
+  }
+  if (drag.type === 'crop-resize') {
+    const iw = CROP.img.naturalWidth, ih = CROP.img.naturalHeight;
+    // Width driven by whichever axis the pointer has pulled furthest, ratio locked
+    let w = Math.max(Math.abs(cp.x - drag.ax), Math.abs(cp.y - drag.ay) * 16 / 9);
+    // Keep the anchored corner inside the image
+    const maxWx = drag.dx === 1 ? iw - drag.ax : drag.ax;
+    const maxWy = (drag.dy === 1 ? ih - drag.ay : drag.ay) * 16 / 9;
+    const maxW  = Math.min(maxWx, maxWy);
+    w = Math.max(Math.min(MIN_W, maxW), Math.min(w, maxW));
+    CROP.w = w;
+    CROP.x = drag.dx === 1 ? drag.ax : drag.ax - w;
+    CROP.y = drag.dy === 1 ? drag.ay : drag.ay - w * 9 / 16;
+    renderCrop();
+    return;
+  }
 
   if (drag.type === 'mag-move') {
     drag.m.dstX = drag.ox + (e.clientX - drag.sx) / drag.sc;
@@ -862,6 +1040,7 @@ function getBlurred() {
 // ── Main render ───────────────────────────────────────────────────────────
 // R = resolution multiplier (1 for preview, EXPORT_W/CW for export)
 function render(R = 1) {
+  if (CROP.active) { renderCrop(); return; }
   if (!S.img) return;
 
   const { w: CW, h: CH } = getCanvasDims();
