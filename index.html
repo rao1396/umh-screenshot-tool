@@ -334,6 +334,13 @@
       <p>Drop or paste image here<br/><span style="opacity:.5;font-size:11px">⌘V · click to browse</span></p>
       <input type="file" id="file-input" accept="image/*" />
     </div>
+    <button class="act-btn" id="capture-btn" style="width:100%;margin-top:8px;padding:8px 0;display:flex;align-items:center;justify-content:center;gap:6px">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+        <path d="M4 7h3l2-2h6l2 2h3a1 1 0 011 1v11a1 1 0 01-1 1H4a1 1 0 01-1-1V8a1 1 0 011-1z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+        <circle cx="12" cy="13" r="3.5" stroke="currentColor" stroke-width="1.7"/>
+      </svg>
+      Capture screen
+    </button>
     <div id="upload-msg" style="display:none"></div>
     <p class="req-note">Requires ≥ 1280×720 and ~16:9 aspect.</p>
   </div>
@@ -603,6 +610,40 @@ $area.addEventListener('drop', e => { e.preventDefault(); if (e.dataTransfer.fil
 document.addEventListener('paste', e => {
   for (const item of (e.clipboardData?.items || []))
     if (item.type.startsWith('image/')) { loadFile(item.getAsFile()); break; }
+});
+
+// In-app screen capture — grabs one frame at native resolution, then runs it
+// through the same validation as uploads so res/aspect problems surface instantly
+document.getElementById('capture-btn').addEventListener('click', async () => {
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    showUploadError('Screen capture isn’t supported in this browser.');
+    return;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { displaySurface: 'window' },
+      audio: false,
+      preferCurrentTab: false,
+    });
+  } catch {
+    return;  // user cancelled the picker
+  }
+  try {
+    const video = document.createElement('video');
+    video.srcObject = stream;
+    await video.play();
+    // Give the stream a moment to deliver a full-resolution frame
+    await new Promise(r => setTimeout(r, 300));
+    const w = video.videoWidth, h = video.videoHeight;
+    const cap = document.createElement('canvas');
+    cap.width = w; cap.height = h;
+    cap.getContext('2d').drawImage(video, 0, 0, w, h);
+    const blob = await new Promise(r => cap.toBlob(r, 'image/png'));
+    loadFile(new File([blob], 'capture.png', { type: 'image/png' }));
+  } finally {
+    stream.getTracks().forEach(t => t.stop());
+  }
 });
 
 const $uploadMsg = document.getElementById('upload-msg');
