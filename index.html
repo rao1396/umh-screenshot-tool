@@ -427,7 +427,7 @@
     <div class="ctrl-row">
       <span class="ctrl-label">Zoom</span>
       <div class="range-wrap">
-        <input type="range" id="preview-scale" min="15" max="100" value="60" step="1"/>
+        <input type="range" id="preview-scale" min="5" max="100" value="60" step="1"/>
         <span class="val-badge" id="preview-scale-val">60%</span>
       </div>
     </div>
@@ -667,6 +667,16 @@ const $uploadMsg = document.getElementById('upload-msg');
 function showUploadError(msg) { $uploadMsg.innerHTML = msg; $uploadMsg.style.display = 'block'; }
 function clearUploadError()   { $uploadMsg.style.display = 'none'; $uploadMsg.textContent = ''; }
 
+// Fit the preview zoom so content of cw×ch px is fully visible in the work area
+function fitPreview(cw, ch) {
+  const area = $area.getBoundingClientRect();
+  const pct = Math.floor(Math.min((area.width - 70) / cw, (area.height - 70) / ch, 1) * 100);
+  S.previewScale = Math.max(5, Math.min(100, pct));
+  const el = document.getElementById('preview-scale');
+  el.value = S.previewScale;
+  document.getElementById('preview-scale-val').textContent = S.previewScale + '%';
+}
+
 // Adopt a validated image as the working screenshot
 function adoptImage(img) {
   clearUploadError();
@@ -682,6 +692,8 @@ function adoptImage(img) {
   $wrap.style.display  = 'block';
   $exp.disabled = false;
   $copy.disabled = false;
+  const dims = getCanvasDims();
+  fitPreview(dims.w, dims.h);
   setMode('move');
   render();
 }
@@ -692,20 +704,14 @@ function loadFile(file) {
   const img = new Image();
   img.onload = () => {
     const w = img.naturalWidth, h = img.naturalHeight;
-    const ar = w / h;
-    const arLo = TARGET_AR * (1 - AR_TOL), arHi = TARGET_AR * (1 + AR_TOL);
     if (w < MIN_W || h < MIN_H) {
       showUploadError(`Upload rejected: resolution is <b>${w}×${h}</b> — minimum is <b>${MIN_W}×${MIN_H}</b>.`);
       URL.revokeObjectURL(url);
       $fi.value = '';
       return;
     }
-    if (ar < arLo || ar > arHi) {
-      // Big enough but wrong shape — let the user crop a 16:9 region out of it
-      startCrop(img);
-      return;
-    }
-    adoptImage(img);
+    // Every image goes through the 16:9 crop step, whatever its shape or source
+    startCrop(img);
   };
   img.onerror = () => { showUploadError('Couldn’t read that image file.'); URL.revokeObjectURL(url); };
   img.src = url;
@@ -733,6 +739,7 @@ function startCrop(img) {
   $banner.textContent = '✂︎ Position the 16:9 frame — drag to move, corners to resize';
   $banner.classList.add('visible');
   canvas.style.cursor = 'move';
+  fitPreview(iw, ih);
   renderCrop();
 }
 
