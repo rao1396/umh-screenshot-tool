@@ -150,6 +150,36 @@
     .range-wrap { display: flex; align-items: center; gap: 7px; }
     .val-badge { font-size: 11px; color: var(--text-muted); width: 26px; text-align: right; font-variant-numeric: tabular-nums; }
 
+    /* Fade-corner picker */
+    .corner-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      width: 108px;
+    }
+    .corner-btn {
+      aspect-ratio: 16 / 9;
+      border-radius: var(--radius-s);
+      border: 1px solid var(--border-hover);
+      background: var(--surface2);
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      padding: 0;
+      transition: border-color 0.1s;
+    }
+    .corner-btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+    }
+    .corner-btn[data-corner="tl"]::after { background: linear-gradient(to top left,     rgba(0,54,255,0.65), transparent 62%); }
+    .corner-btn[data-corner="tr"]::after { background: linear-gradient(to top right,    rgba(0,54,255,0.65), transparent 62%); }
+    .corner-btn[data-corner="bl"]::after { background: linear-gradient(to bottom left,  rgba(0,54,255,0.65), transparent 62%); }
+    .corner-btn[data-corner="br"]::after { background: linear-gradient(to bottom right, rgba(0,54,255,0.65), transparent 62%); }
+    .corner-btn:hover { border-color: var(--accent-soft); }
+    .corner-btn.active { border-color: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent-soft); }
+
     /* Tool buttons */
     .tool-grid {
       display: grid;
@@ -357,14 +387,16 @@
     </div>
   </div>
 
-  <!-- Frame -->
+  <!-- Edge Fade -->
   <div class="section">
-    <div class="section-label">Frame</div>
-    <div class="ctrl-row">
-      <span class="ctrl-label">Scale</span>
-      <div class="range-wrap">
-        <input type="range" id="img-scale" min="20" max="100" value="100" step="5"/>
-        <span class="val-badge" id="img-scale-val" style="width:36px">100%</span>
+    <div class="section-label">Fade Corner</div>
+    <div class="ctrl-row" style="align-items:flex-start">
+      <span class="ctrl-label" style="padding-top:4px">Direction</span>
+      <div class="corner-grid">
+        <button class="corner-btn" data-corner="tl" title="Top-left"></button>
+        <button class="corner-btn" data-corner="tr" title="Top-right"></button>
+        <button class="corner-btn" data-corner="bl" title="Bottom-left"></button>
+        <button class="corner-btn active" data-corner="br" title="Bottom-right"></button>
       </div>
     </div>
   </div>
@@ -487,10 +519,10 @@ const S = {
   previewScale: 60,
   ratio: '16:9',
   bgColor: '#0f192e',
-  fadeRight: 40,
-  fadeBottom: 40,
+  fadeCorner: 'br',   // 'tl' | 'tr' | 'bl' | 'br'
+  fadeAmount: 40,     // % of canvas each fading edge covers
   fadeStrength: 100,
-  imgScale: 1,
+  imgScale: 1,        // fixed — image always fills the inner frame
   offsetX: null,
   offsetY: null,
   // Annotations (image coords unless noted)
@@ -515,8 +547,6 @@ function undo() {
   if (!snap) { showInfo('Nothing to undo'); return; }
   const s = JSON.parse(snap);
   Object.assign(S, s);
-  $imgScale.value = Math.round(S.imgScale * 100);
-  document.getElementById('img-scale-val').textContent = Math.round(S.imgScale * 100) + '%';
   render();
   showInfo('Undone');
 }
@@ -551,13 +581,13 @@ bindRange('mag-zoom', 'magZoom', v => parseFloat(v).toFixed(1).replace('.0','') 
   S.magnifiers.forEach(clampDst);
 });
 
-const $imgScale = document.getElementById('img-scale');
-$imgScale.addEventListener('input', () => {
-  S.imgScale = parseFloat($imgScale.value) / 100;
-  document.getElementById('img-scale-val').textContent = $imgScale.value + '%';
-  S.offsetX = null; S.offsetY = null;
-  S.magnifiers.forEach(clampDst);
-  render();
+// Fade-corner picker
+document.querySelectorAll('.corner-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    S.fadeCorner = btn.dataset.corner;
+    document.querySelectorAll('.corner-btn').forEach(b => b.classList.toggle('active', b === btn));
+    render();
+  });
 });
 
 // ── Modes / tools ─────────────────────────────────────────────────────────
@@ -684,9 +714,6 @@ function adoptImage(img) {
   S.magnifiers = []; S.blurs = [];
   undoStack.length = 0;
   S.offsetX = null; S.offsetY = null;
-  S.imgScale = 1;
-  $imgScale.value = 100;
-  document.getElementById('img-scale-val').textContent = '100%';
   blurCache = null;
   $empty.style.display = 'none';
   $wrap.style.display  = 'block';
@@ -1105,9 +1132,19 @@ function render(R = 1) {
   }
   ctx.restore();
 
-  // Border — fades toward the bottom-right edge
+  // Which two edges fade, based on the chosen corner
+  const corner   = S.fadeCorner;
+  const fadeRight  = corner === 'br' || corner === 'tr';
+  const fadeLeft   = corner === 'bl' || corner === 'tl';
+  const fadeBottom = corner === 'br' || corner === 'bl';
+  const fadeTop    = corner === 'tr' || corner === 'tl';
+
+  // Border — full at the corner opposite the fade, transparent toward the fade corner
+  const cTL = [ix, iy], cTR = [ix + dw, iy], cBL = [ix, iy + dh], cBR = [ix + dw, iy + dh];
+  const fadeEnds = { tl: [cBR, cTL], tr: [cBL, cTR], bl: [cTR, cBL], br: [cTL, cBR] };
+  const [gO, gF] = fadeEnds[corner];
   ctx.save();
-  const bgGrad = ctx.createLinearGradient(ix, iy, ix + dw, iy + dh);
+  const bgGrad = ctx.createLinearGradient(gO[0], gO[1], gF[0], gF[1]);
   bgGrad.addColorStop(0,    'rgba(255,255,255,0.22)');
   bgGrad.addColorStop(0.45, 'rgba(255,255,255,0.20)');
   bgGrad.addColorStop(0.8,  'rgba(255,255,255,0.05)');
@@ -1116,21 +1153,29 @@ function render(R = 1) {
   ctx.strokeStyle = bgGrad; ctx.lineWidth = 1.5; ctx.stroke();
   ctx.restore();
 
-  // Edge fades
+  // Edge fades — the two edges meeting at the chosen corner blend into the background
   const alpha = S.fadeStrength / 100;
-  if (S.fadeRight > 0) {
-    const fw = CW * (S.fadeRight / 100);
-    const gx = ctx.createLinearGradient(CW-fw, 0, CW, 0);
-    gx.addColorStop(0, hexRgba(S.bgColor, 0));
-    gx.addColorStop(1, hexRgba(S.bgColor, alpha));
-    ctx.fillStyle = gx; ctx.fillRect(CW-fw, 0, fw, CH);
+  const amt   = S.fadeAmount / 100;
+  const fw = CW * amt, fh = CH * amt;
+  if (fadeRight) {
+    const g = ctx.createLinearGradient(CW-fw, 0, CW, 0);
+    g.addColorStop(0, hexRgba(S.bgColor, 0)); g.addColorStop(1, hexRgba(S.bgColor, alpha));
+    ctx.fillStyle = g; ctx.fillRect(CW-fw, 0, fw, CH);
   }
-  if (S.fadeBottom > 0) {
-    const fh = CH * (S.fadeBottom / 100);
-    const gy = ctx.createLinearGradient(0, CH-fh, 0, CH);
-    gy.addColorStop(0, hexRgba(S.bgColor, 0));
-    gy.addColorStop(1, hexRgba(S.bgColor, alpha));
-    ctx.fillStyle = gy; ctx.fillRect(0, CH-fh, CW, fh);
+  if (fadeLeft) {
+    const g = ctx.createLinearGradient(fw, 0, 0, 0);
+    g.addColorStop(0, hexRgba(S.bgColor, 0)); g.addColorStop(1, hexRgba(S.bgColor, alpha));
+    ctx.fillStyle = g; ctx.fillRect(0, 0, fw, CH);
+  }
+  if (fadeBottom) {
+    const g = ctx.createLinearGradient(0, CH-fh, 0, CH);
+    g.addColorStop(0, hexRgba(S.bgColor, 0)); g.addColorStop(1, hexRgba(S.bgColor, alpha));
+    ctx.fillStyle = g; ctx.fillRect(0, CH-fh, CW, fh);
+  }
+  if (fadeTop) {
+    const g = ctx.createLinearGradient(0, fh, 0, 0);
+    g.addColorStop(0, hexRgba(S.bgColor, 0)); g.addColorStop(1, hexRgba(S.bgColor, alpha));
+    ctx.fillStyle = g; ctx.fillRect(0, 0, CW, fh);
   }
 
   // Annotations (drawn above the fades so they stay crisp)
