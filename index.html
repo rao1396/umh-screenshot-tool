@@ -481,7 +481,7 @@
         <path d="M12 3v13m0 0l-4-4m4 4l4-4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
       </svg>
-      Export WebP (2560px wide)
+      Export WebP (2560×1440)
     </button>
   </div>
 </aside>
@@ -860,43 +860,40 @@ function srcRect() {
   if (!S.img) return { x:0, y:0, w:0, h:0 };
   return { x:0, y:0, w:S.img.naturalWidth, h:S.img.naturalHeight };
 }
-function drawnSize() {
-  const sr = srcRect();
-  return { w: sr.w * S.imgScale, h: sr.h * S.imgScale };
-}
-// Canvas = image + equal padding on all four sides, so the navy border is
-// identical everywhere. (Overall canvas is therefore slightly wider than 16:9;
-// the screenshot itself stays exactly 16:9.)
+// Canvas is strictly 16:9. The screenshot fills the inner area inset by an
+// equal 80px border on every side — its aspect is adjusted slightly to fit, so
+// the border stays uniform and the exported file is exactly 16:9.
 function getCanvasDims() {
   const sr = srcRect();
   if (!sr.w) return { w:1920, h:1080 };
-  const ds = drawnSize();
-  const w = Math.round(ds.w + S.padding * 2);
-  const h = Math.round(ds.h + S.padding * 2);
+  const [rw, rh] = S.ratio.split(':').map(Number);
+  const w = Math.round(sr.w + S.padding * 2);
+  const h = Math.round(w * rh / rw);
   return { w, h };
 }
-// Image is always centered in the 16:9 canvas — equal left/right and equal
-// top/bottom margins. (Two concentric 16:9 rects can't have all four margins
-// pixel-equal, so margins land in a 16:9 ratio: left=right, top=bottom.)
-function autoOffset() {
+// How the screenshot maps into the canvas: top-left at (padding,padding),
+// stretched to fill the inner rect. Per-axis scale (sx ≠ sy in general).
+function frameRect() {
   const { w: CW, h: CH } = getCanvasDims();
-  const ds = drawnSize();
-  return { x: (CW - ds.w) / 2, y: (CH - ds.h) / 2 };
+  const sr = srcRect();
+  const dw = CW - 2 * S.padding;
+  const dh = CH - 2 * S.padding;
+  return { ix: S.padding, iy: S.padding, dw, dh,
+           sx: sr.w ? dw / sr.w : 1, sy: sr.h ? dh / sr.h : 1 };
 }
+function autoOffset() { return { x: S.padding, y: S.padding }; }
 function displayToCanvas(ex, ey) {
   const rect = canvas.getBoundingClientRect();
   const sc   = S.previewScale / 100;
   return { x: (ex - rect.left) / sc, y: (ey - rect.top) / sc };
 }
 function canvasToImg(cx, cy) {
-  const ix = S.offsetX ?? autoOffset().x;
-  const iy = S.offsetY ?? autoOffset().y;
-  return { x: (cx - ix) / S.imgScale, y: (cy - iy) / S.imgScale };
+  const f = frameRect();
+  return { x: (cx - f.ix) / f.sx, y: (cy - f.iy) / f.sy };
 }
 function imgToCanvas(px, py) {
-  const ix = S.offsetX ?? autoOffset().x;
-  const iy = S.offsetY ?? autoOffset().y;
-  return { x: ix + px * S.imgScale, y: iy + py * S.imgScale };
+  const f = frameRect();
+  return { x: f.ix + px * f.sx, y: f.iy + py * f.sy };
 }
 function clampToImg(p) {
   return {
@@ -907,8 +904,9 @@ function clampToImg(p) {
 
 // Callout geometry — shows the ENTIRE selected region at magZoom×
 function calloutGeo(m) {
-  const dcW = m.srcW * S.imgScale * S.magZoom;
-  const dcH = m.srcH * S.imgScale * S.magZoom;
+  const f = frameRect();
+  const dcW = m.srcW * f.sx * S.magZoom;
+  const dcH = m.srcH * f.sy * S.magZoom;
   return { dcW, dcH, cW: dcW, cH: dcH };
 }
 function clampDst(m) {
@@ -1099,12 +1097,10 @@ function render(R = 1) {
   ctx.fillStyle = S.bgColor;
   ctx.fillRect(0, 0, CW, CH);
 
-  // Fixed anchor — every render uses the same top-left origin
-  const ao = autoOffset();
-  S.offsetX = ao.x; S.offsetY = ao.y;
-  const ix = S.offsetX, iy = S.offsetY;
-  const ds = drawnSize();
-  const dw = ds.w, dh = ds.h;
+  // Screenshot fills the inner rect (equal 80px border); per-axis scale
+  const f = frameRect();
+  const ix = f.ix, iy = f.iy, dw = f.dw, dh = f.dh;
+  S.offsetX = ix; S.offsetY = iy;
 
   // Shadow
   ctx.save();
@@ -1126,7 +1122,7 @@ function render(R = 1) {
     const blurred = getBlurred();
     for (const b of S.blurs) {
       const p = imgToCanvas(b.x, b.y);
-      const bw = b.w * S.imgScale, bh = b.h * S.imgScale;
+      const bw = b.w * f.sx, bh = b.h * f.sy;
       ctx.save();
       ctx.beginPath();
       ctx.roundRect(p.x, p.y, bw, bh, Math.min(10, bw/2, bh/2));
@@ -1202,8 +1198,9 @@ function drawMagnifier(m) {
   const cY = dstY - dcH / 2;
   const cr = 10;
 
+  const fr = frameRect();
   const sel = imgToCanvas(srcX, srcY);
-  const selW = srcW * S.imgScale, selH = srcH * S.imgScale;
+  const selW = srcW * fr.sx, selH = srcH * fr.sy;
   const selCX = sel.x + selW / 2, selCY = sel.y + selH / 2;
 
   // Connector line — runs edge-to-edge, not centre-to-centre
