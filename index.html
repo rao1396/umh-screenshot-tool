@@ -150,15 +150,15 @@
     .range-wrap { display: flex; align-items: center; gap: 7px; }
     .val-badge { font-size: 11px; color: var(--text-muted); width: 26px; text-align: right; font-variant-numeric: tabular-nums; }
 
-    /* Fade-corner picker */
-    .corner-grid {
+    /* Fade-direction picker (3×3: corners, edges, none) */
+    .fade-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 6px;
-      width: 108px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 5px;
+      width: 132px;
     }
-    .corner-btn {
-      aspect-ratio: 16 / 9;
+    .fade-cell {
+      aspect-ratio: 1;
       border-radius: var(--radius-s);
       border: 1px solid var(--border-hover);
       background: var(--surface2);
@@ -168,17 +168,22 @@
       padding: 0;
       transition: border-color 0.1s;
     }
-    .corner-btn::after {
-      content: '';
-      position: absolute;
-      inset: 0;
+    .fade-cell::after { content: ''; position: absolute; inset: 0; }
+    .fade-cell[data-dir="tl"]::after { background: linear-gradient(to top left,     rgba(0,54,255,0.75), transparent 60%); }
+    .fade-cell[data-dir="t"]::after  { background: linear-gradient(to top,          rgba(0,54,255,0.75), transparent 60%); }
+    .fade-cell[data-dir="tr"]::after { background: linear-gradient(to top right,    rgba(0,54,255,0.75), transparent 60%); }
+    .fade-cell[data-dir="l"]::after  { background: linear-gradient(to left,         rgba(0,54,255,0.75), transparent 60%); }
+    .fade-cell[data-dir="r"]::after  { background: linear-gradient(to right,        rgba(0,54,255,0.75), transparent 60%); }
+    .fade-cell[data-dir="bl"]::after { background: linear-gradient(to bottom left,  rgba(0,54,255,0.75), transparent 60%); }
+    .fade-cell[data-dir="b"]::after  { background: linear-gradient(to bottom,       rgba(0,54,255,0.75), transparent 60%); }
+    .fade-cell[data-dir="br"]::after { background: linear-gradient(to bottom right, rgba(0,54,255,0.75), transparent 60%); }
+    .fade-cell[data-dir="none"]::before {
+      content: '⦰'; position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-dim); font-size: 14px;
     }
-    .corner-btn[data-corner="tl"]::after { background: linear-gradient(to top left,     rgba(0,54,255,0.65), transparent 62%); }
-    .corner-btn[data-corner="tr"]::after { background: linear-gradient(to top right,    rgba(0,54,255,0.65), transparent 62%); }
-    .corner-btn[data-corner="bl"]::after { background: linear-gradient(to bottom left,  rgba(0,54,255,0.65), transparent 62%); }
-    .corner-btn[data-corner="br"]::after { background: linear-gradient(to bottom right, rgba(0,54,255,0.65), transparent 62%); }
-    .corner-btn:hover { border-color: var(--accent-soft); }
-    .corner-btn.active { border-color: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent-soft); }
+    .fade-cell:hover { border-color: var(--accent-soft); }
+    .fade-cell.active { border-color: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent-soft); }
 
     /* Tool buttons */
     .tool-grid {
@@ -389,15 +394,17 @@
 
   <!-- Edge Fade -->
   <div class="section">
-    <div class="section-label">Fade Corner</div>
-    <div class="ctrl-row" style="align-items:flex-start">
-      <span class="ctrl-label" style="padding-top:4px">Direction</span>
-      <div class="corner-grid">
-        <button class="corner-btn" data-corner="tl" title="Top-left"></button>
-        <button class="corner-btn" data-corner="tr" title="Top-right"></button>
-        <button class="corner-btn" data-corner="bl" title="Bottom-left"></button>
-        <button class="corner-btn active" data-corner="br" title="Bottom-right"></button>
-      </div>
+    <div class="section-label">Fade Direction</div>
+    <div class="fade-grid">
+      <button class="fade-cell" data-dir="tl"   title="Top-left"></button>
+      <button class="fade-cell" data-dir="t"    title="Top"></button>
+      <button class="fade-cell" data-dir="tr"   title="Top-right"></button>
+      <button class="fade-cell" data-dir="l"    title="Left"></button>
+      <button class="fade-cell" data-dir="none" title="No fade"></button>
+      <button class="fade-cell" data-dir="r"    title="Right"></button>
+      <button class="fade-cell" data-dir="bl"   title="Bottom-left"></button>
+      <button class="fade-cell" data-dir="b"    title="Bottom"></button>
+      <button class="fade-cell active" data-dir="br" title="Bottom-right"></button>
     </div>
   </div>
 
@@ -519,7 +526,7 @@ const S = {
   previewScale: 60,
   ratio: '16:9',
   bgColor: '#0f192e',
-  fadeCorner: 'br',   // 'tl' | 'tr' | 'bl' | 'br'
+  fadeDir: 'br',      // 'tl'|'t'|'tr'|'l'|'none'|'r'|'bl'|'b'|'br'
   fadeAmount: 40,     // % of canvas each fading edge covers
   fadeStrength: 100,
   imgScale: 1,        // fixed — image always fills the inner frame
@@ -581,11 +588,11 @@ bindRange('mag-zoom', 'magZoom', v => parseFloat(v).toFixed(1).replace('.0','') 
   S.magnifiers.forEach(clampDst);
 });
 
-// Fade-corner picker
-document.querySelectorAll('.corner-btn').forEach(btn => {
+// Fade-direction picker
+document.querySelectorAll('.fade-cell').forEach(btn => {
   btn.addEventListener('click', () => {
-    S.fadeCorner = btn.dataset.corner;
-    document.querySelectorAll('.corner-btn').forEach(b => b.classList.toggle('active', b === btn));
+    S.fadeDir = btn.dataset.dir;
+    document.querySelectorAll('.fade-cell').forEach(b => b.classList.toggle('active', b === btn));
     render();
   });
 });
@@ -1057,19 +1064,21 @@ window.addEventListener('mouseup', () => {
 });
 
 // ── Gaussian blur (redact) ────────────────────────────────────────────────
-let blurCache = null;  // offscreen canvas with a blurred copy of the image
+let blurCache = null;  // blurred copy of the image, in display (frame) space
 function getBlurred() {
   if (blurCache) return blurCache;
-  const w = S.img.naturalWidth, h = S.img.naturalHeight;
-  // Blur radius scales with image size so it reads the same at any resolution
-  const radius = Math.max(10, Math.round(w / 120));
+  // Blur in the SAME geometry the screenshot is displayed (inner frame rect),
+  // so the blur is isotropic on screen even though the image is stretched per-axis.
+  const f = frameRect();
+  const W = Math.max(1, Math.round(f.dw)), H = Math.max(1, Math.round(f.dh));
+  const radius = Math.max(8, Math.round(W / 110));
   const c = document.createElement('canvas');
-  c.width = w; c.height = h;
+  c.width = W; c.height = H;
   const bctx = c.getContext('2d');
   bctx.filter = `blur(${radius}px)`;
-  bctx.drawImage(S.img, 0, 0, w, h);
+  bctx.drawImage(S.img, 0, 0, S.img.naturalWidth, S.img.naturalHeight, 0, 0, W, H);
   // Second pass strengthens the blur so text is unreadable
-  bctx.drawImage(c, 0, 0, w, h);
+  bctx.drawImage(c, 0, 0);
   blurCache = c;
   return c;
 }
@@ -1123,38 +1132,49 @@ function render(R = 1) {
     for (const b of S.blurs) {
       const p = imgToCanvas(b.x, b.y);
       const bw = b.w * f.sx, bh = b.h * f.sy;
+      // Source rect within the frame-space blurred canvas (same scale as display)
+      const sX = b.x * f.sx, sY = b.y * f.sy;
       ctx.save();
       ctx.beginPath();
       ctx.roundRect(p.x, p.y, bw, bh, Math.min(10, bw/2, bh/2));
       ctx.clip();
-      ctx.drawImage(blurred, b.x, b.y, b.w, b.h, p.x, p.y, bw, bh);
+      ctx.drawImage(blurred, sX, sY, bw, bh, p.x, p.y, bw, bh);
       ctx.restore();
     }
   }
   ctx.restore();
 
-  // Which two edges fade, based on the chosen corner
-  const corner   = S.fadeCorner;
-  const fadeRight  = corner === 'br' || corner === 'tr';
-  const fadeLeft   = corner === 'bl' || corner === 'tl';
-  const fadeBottom = corner === 'br' || corner === 'bl';
-  const fadeTop    = corner === 'tr' || corner === 'tl';
+  // Which edges fade, based on the chosen direction (corner = two edges, edge = one)
+  const dir = S.fadeDir;
+  const fadeRight  = dir === 'r' || dir === 'tr' || dir === 'br';
+  const fadeLeft   = dir === 'l' || dir === 'tl' || dir === 'bl';
+  const fadeBottom = dir === 'b' || dir === 'bl' || dir === 'br';
+  const fadeTop    = dir === 't' || dir === 'tl' || dir === 'tr';
 
-  // Border — full at the corner opposite the fade, transparent toward the fade corner
-  const cTL = [ix, iy], cTR = [ix + dw, iy], cBL = [ix, iy + dh], cBR = [ix + dw, iy + dh];
-  const fadeEnds = { tl: [cBR, cTL], tr: [cBL, cTR], bl: [cTR, cBL], br: [cTL, cBR] };
-  const [gO, gF] = fadeEnds[corner];
+  // Border — full at the side opposite the fade, transparent toward the fade
+  const mT = [ix+dw/2, iy], mB = [ix+dw/2, iy+dh], mL = [ix, iy+dh/2], mR = [ix+dw, iy+dh/2];
+  const cTL = [ix, iy], cTR = [ix+dw, iy], cBL = [ix, iy+dh], cBR = [ix+dw, iy+dh];
+  const gradEnds = {
+    r:[mL,mR], l:[mR,mL], t:[mB,mT], b:[mT,mB],
+    tl:[cBR,cTL], tr:[cBL,cTR], bl:[cTR,cBL], br:[cTL,cBR],
+  };
   ctx.save();
-  const bgGrad = ctx.createLinearGradient(gO[0], gO[1], gF[0], gF[1]);
-  bgGrad.addColorStop(0,    'rgba(255,255,255,0.22)');
-  bgGrad.addColorStop(0.45, 'rgba(255,255,255,0.20)');
-  bgGrad.addColorStop(0.8,  'rgba(255,255,255,0.05)');
-  bgGrad.addColorStop(1,    'rgba(255,255,255,0)');
   ctx.beginPath(); ctx.roundRect(ix + 0.75, iy + 0.75, dw - 1.5, dh - 1.5, S.radius);
-  ctx.strokeStyle = bgGrad; ctx.lineWidth = 1.5; ctx.stroke();
+  if (dir === 'none') {
+    ctx.strokeStyle = 'rgba(255,255,255,0.20)';
+  } else {
+    const [gO, gF] = gradEnds[dir];
+    const bgGrad = ctx.createLinearGradient(gO[0], gO[1], gF[0], gF[1]);
+    bgGrad.addColorStop(0,    'rgba(255,255,255,0.22)');
+    bgGrad.addColorStop(0.45, 'rgba(255,255,255,0.20)');
+    bgGrad.addColorStop(0.8,  'rgba(255,255,255,0.05)');
+    bgGrad.addColorStop(1,    'rgba(255,255,255,0)');
+    ctx.strokeStyle = bgGrad;
+  }
+  ctx.lineWidth = 1.5; ctx.stroke();
   ctx.restore();
 
-  // Edge fades — the two edges meeting at the chosen corner blend into the background
+  // Edge fades — the chosen edge(s) blend into the background
   const alpha = S.fadeStrength / 100;
   const amt   = S.fadeAmount / 100;
   const fw = CW * amt, fh = CH * amt;
