@@ -177,11 +177,7 @@
     .fade-cell[data-dir="bl"]::after { background: linear-gradient(to bottom left,  rgba(0,54,255,0.75), transparent 60%); }
     .fade-cell[data-dir="b"]::after  { background: linear-gradient(to bottom,       rgba(0,54,255,0.75), transparent 60%); }
     .fade-cell[data-dir="br"]::after { background: linear-gradient(to bottom right, rgba(0,54,255,0.75), transparent 60%); }
-    .fade-cell[data-dir="none"]::before {
-      content: '⦰'; position: absolute; inset: 0;
-      display: flex; align-items: center; justify-content: center;
-      color: var(--text-dim); font-size: 14px;
-    }
+    .fade-cell-spacer { aspect-ratio: 1; }
     .fade-cell:hover { border-color: var(--accent-soft); }
     .fade-cell.active { border-color: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent-soft); }
 
@@ -400,7 +396,7 @@
       <button class="fade-cell" data-dir="t"    title="Top"></button>
       <button class="fade-cell" data-dir="tr"   title="Top-right"></button>
       <button class="fade-cell" data-dir="l"    title="Left"></button>
-      <button class="fade-cell" data-dir="none" title="No fade"></button>
+      <span class="fade-cell-spacer"></span>
       <button class="fade-cell" data-dir="r"    title="Right"></button>
       <button class="fade-cell" data-dir="bl"   title="Bottom-left"></button>
       <button class="fade-cell" data-dir="b"    title="Bottom"></button>
