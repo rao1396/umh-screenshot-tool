@@ -481,7 +481,7 @@
         <path d="M12 3v13m0 0l-4-4m4 4l4-4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
       </svg>
-      Export WebP (2560×1440)
+      Export WebP (2560px wide)
     </button>
   </div>
 </aside>
@@ -864,12 +864,15 @@ function drawnSize() {
   const sr = srcRect();
   return { w: sr.w * S.imgScale, h: sr.h * S.imgScale };
 }
+// Canvas = image + equal padding on all four sides, so the navy border is
+// identical everywhere. (Overall canvas is therefore slightly wider than 16:9;
+// the screenshot itself stays exactly 16:9.)
 function getCanvasDims() {
   const sr = srcRect();
   if (!sr.w) return { w:1920, h:1080 };
-  const [rw, rh] = S.ratio.split(':').map(Number);
-  const w = Math.round(sr.w + S.padding * 2);
-  const h = Math.round(w * rh / rw);
+  const ds = drawnSize();
+  const w = Math.round(ds.w + S.padding * 2);
+  const h = Math.round(ds.h + S.padding * 2);
   return { w, h };
 }
 // Image is always centered in the 16:9 canvas — equal left/right and equal
@@ -1285,6 +1288,7 @@ $exp.addEventListener('click', () => {
   const fname = slugify(typed || `changelog-${today}`) + '.webp';
 
   renderForOutput(done => {
+    const ew = canvas.width, eh = canvas.height;  // actual export dimensions
     canvas.toBlob(blob => {
       if (!blob) { showInfo('Export failed'); done(); return; }
       const url = URL.createObjectURL(blob);
@@ -1294,7 +1298,7 @@ $exp.addEventListener('click', () => {
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
       done();
-      showInfo(`Exported ${fname} — ${Math.round(blob.size / 1024)} KB (${EXPORT_W}×${EXPORT_H})`);
+      showInfo(`Exported ${fname} — ${Math.round(blob.size / 1024)} KB (${ew}×${eh})`);
     }, 'image/webp', 0.92);
   });
 });
