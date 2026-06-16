@@ -872,11 +872,13 @@ function getCanvasDims() {
   const h = Math.round(w * rh / rw);
   return { w, h };
 }
-// Image is always anchored at a fixed top-left position (standard padding),
-// so every export shares the same x/y origin. Scale only grows/shrinks it
-// toward the bottom-right.
+// Image is always centered in the 16:9 canvas — equal left/right and equal
+// top/bottom margins. (Two concentric 16:9 rects can't have all four margins
+// pixel-equal, so margins land in a 16:9 ratio: left=right, top=bottom.)
 function autoOffset() {
-  return { x: S.padding, y: S.padding };
+  const { w: CW, h: CH } = getCanvasDims();
+  const ds = drawnSize();
+  return { x: (CW - ds.w) / 2, y: (CH - ds.h) / 2 };
 }
 function displayToCanvas(ex, ey) {
   const rect = canvas.getBoundingClientRect();
