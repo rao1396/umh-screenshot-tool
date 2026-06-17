@@ -484,7 +484,7 @@
         <path d="M12 3v13m0 0l-4-4m4 4l4-4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
       </svg>
-      Export WebP (2560×1440)
+      Export WebP (2560px wide)
     </button>
   </div>
 </aside>
@@ -863,19 +863,18 @@ function srcRect() {
   if (!S.img) return { x:0, y:0, w:0, h:0 };
   return { x:0, y:0, w:S.img.naturalWidth, h:S.img.naturalHeight };
 }
-// Canvas is strictly 16:9. The screenshot fills the inner area inset by an
-// equal 80px border on every side — its aspect is adjusted slightly to fit, so
-// the border stays uniform and the exported file is exactly 16:9.
+// Canvas = the undistorted screenshot + an equal 80px border on every side.
+// The screenshot keeps its true 16:9 aspect (no stretch); the overall canvas
+// is therefore slightly off 16:9, and the export adapts to it.
 function getCanvasDims() {
   const sr = srcRect();
   if (!sr.w) return { w:1920, h:1080 };
-  const [rw, rh] = S.ratio.split(':').map(Number);
   const w = Math.round(sr.w + S.padding * 2);
-  const h = Math.round(w * rh / rw);
+  const h = Math.round(sr.h + S.padding * 2);
   return { w, h };
 }
 // How the screenshot maps into the canvas: top-left at (padding,padding),
-// stretched to fill the inner rect. Per-axis scale (sx ≠ sy in general).
+// drawn at native size (sx = sy = 1, no distortion).
 function frameRect() {
   const { w: CW, h: CH } = getCanvasDims();
   const sr = srcRect();
